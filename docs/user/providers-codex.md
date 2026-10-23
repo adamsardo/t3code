@@ -76,6 +76,22 @@ reported accounts, refresh provider status, and confirm the second instance has
 its own shadow path and login. A shadow-home conflict usually means the directory
 contains a copied Codex setup. Use a fresh shadow directory and sign in again.
 
+## Ask a temporary side question
+
+On web, desktop, or mobile, send `/side` in an existing Codex thread to open a temporary
+side conversation, or `/side your question` to ask immediately. Each side conversation
+starts with the parent’s context at that moment and shows only its own new messages.
+You can open several side conversations while the main thread keeps working, and
+return to the main thread without discarding them.
+
+Side conversations share the parent’s workspace and permissions. They answer questions
+and inspect information by default; changes require an explicit request in the side
+conversation. Their replies are not added to the parent thread. Requests that need an
+interactive tool approval or structured answer must be continued in a normal thread.
+
+Closing a side conversation discards it. Reloading, closing the app, or losing the
+server connection also ends these temporary conversations; they cannot be recovered.
+
 ## Answer questions while Codex works
 
 Codex can ask a question and keep working. Answer it in the thread's question

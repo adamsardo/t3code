@@ -21,6 +21,7 @@ import * as Stream from "effect/Stream";
 import { rpcInitialItems } from "./rpcInitialItems.ts";
 import { subscribeChatGptHandoff } from "./provider/CodexChatGptHandoff.ts";
 import { subscribeCodexAuthCallback } from "./provider/CodexAuthCallback.ts";
+import * as SideConversations from "./provider/SideConversations.ts";
 import {
   AcpRegistryOperationError,
   CommandId,
@@ -1242,6 +1243,7 @@ export const layerWsRpc = (
       const threadSearch = yield* ThreadSearch.ThreadSearch;
 
       const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const sideConversations = yield* (yield* SideConversations.SideConversations).connect;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
       const analytics = yield* AnalyticsService.AnalyticsService;
       const originProps = clientAnalyticsProps;
@@ -3167,6 +3169,10 @@ export const layerWsRpc = (
               Stream.concat(Stream.make(latest), changes),
             ),
           ),
+        [WS_METHODS.sideConversationOpen]: (input) => sideConversations.open(input),
+        [WS_METHODS.sideConversationSend]: (input) => sideConversations.send(input),
+        [WS_METHODS.sideConversationInterrupt]: (input) => sideConversations.interrupt(input),
+        [WS_METHODS.sideConversationClose]: (input) => sideConversations.close(input),
         [WS_METHODS.subscribeResourceTelemetry]: (_input) =>
           Stream.unwrap(
             Effect.map(resourceTelemetry.subscribe, ({ latest, changes }) =>

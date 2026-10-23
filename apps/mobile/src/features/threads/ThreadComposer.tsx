@@ -1,3 +1,7 @@
+import {
+  consumeSideCommandDraft,
+  parseSideCommand,
+} from "@t3tools/client-runtime/side-conversation-controller";
 import { useSidebarWorkspaceTabs } from "../workspace/useSystemWorkspaceTabBar";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
@@ -272,6 +276,7 @@ export interface ThreadComposerProps {
     followUp?: ActiveTurnComposerAction,
     stillSendable?: () => boolean,
   ) => Promise<MessageId | null>;
+  readonly onSideCommand?: (prompt: string) => Promise<boolean>;
   readonly onShowUsageLimits: (report: UsageLimitsReport | null) => void;
   readonly canSwitchProvider: boolean;
   readonly onUpdateModelSelection: (modelSelection: ModelSelection) => void;
@@ -577,6 +582,8 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
         ? undefined
         : props.onUpdateInteractionMode,
     offersUsageLimits: usageLimitsOffered,
+    onSideCommand:
+      draftAttachments.length === 0 && queuedEdit === null ? props.onSideCommand : undefined,
     onUsageLimits:
       usageLimitsOffered && draftAttachments.length === 0 ? openUsageLimits : undefined,
   });
@@ -671,6 +678,35 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     setComposerEditing(false);
   };
   const handleSend = async (followUp?: ActiveTurnComposerAction) => {
+    const sidePrompt = parseSideCommand(draftMessage);
+    if (sidePrompt !== null) {
+      if (!props.onSideCommand || queuedEdit !== null) {
+        Dialog.alert(
+          "Side conversation unavailable",
+          "Open /side in a connected Codex thread after its first response.",
+        );
+        return;
+      }
+      const issue = await consumeSideCommandDraft({
+        hasNonPromptContent:
+          draftAttachments.length > 0 ||
+          pendingPastedTextAttachmentCountRef.current > 0 ||
+          pendingNativeImagePasteCountRef.current > 0 ||
+          (getComposerDraftSnapshot(composerDraftKey).context?.records.length ?? 0) > 0,
+        commandText: draftMessage,
+        prompt: sidePrompt,
+        open: props.onSideCommand,
+        readDraft: () => getComposerDraftSnapshot(composerDraftKey).text,
+        clearDraft: () => onChangeDraftMessage(""),
+      });
+      if (issue === "attachments") {
+        Dialog.alert(
+          "Side conversations use text",
+          "Remove the attached files and context before opening /side.",
+        );
+      }
+      return;
+    }
     if (
       isSubmissionLocked ||
       sendBlockedReason !== null ||

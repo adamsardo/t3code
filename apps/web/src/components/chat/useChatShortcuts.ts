@@ -56,6 +56,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       return;
     }
     if (!input.enabled || isCommandPaletteOpen()) return;
+    if (event.target instanceof Element && event.target.closest("[data-side-conversation]")) return;
     const terminalFocusOwner = getTerminalFocusOwner();
     if (event.defaultPrevented && terminalFocusOwner === null) return;
     const shortcutContext = input.getShortcutContext(event.target);
@@ -84,6 +85,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     event.stopPropagation();
   });
   const dismissFind = useEffectEvent((event: KeyboardEvent) => {
+    if (event.target instanceof Element && event.target.closest("[data-side-conversation]")) return;
     if (
       event.key !== "Escape" ||
       !input.threadFindActive ||

@@ -1124,6 +1124,12 @@ export const layerWithOptions = (
           // Capture runtime identity before yielding: a replacement session
           // can reuse the same providerSessionId while this fiber is parked.
           const probedRuntime = entry.runtime;
+          // Ephemeral side conversations live only inside this process. Keep their
+          // native history available while open, without marking the parent busy.
+          if (probedRuntime.sideConversations && (yield* probedRuntime.sideConversations.hasOpen)) {
+            yield* Effect.sleep(Duration.millis(idleTimeoutMs));
+            return yield* releaseIfStillIdle(input);
+          }
           const hasPendingWork =
             probedRuntime.hasPendingBackgroundWork === undefined
               ? false

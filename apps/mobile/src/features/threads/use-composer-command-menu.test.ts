@@ -91,3 +91,24 @@ describe("mobile slash commands", () => {
     ).toEqual({ text: "/plan ", cursor: 6, interactionMode: null });
   });
 });
+
+it.each([
+  { driver: "codex", hasThread: true, available: true, atMessageStart: true, visible: true },
+  { driver: "codex", hasThread: false, available: true, atMessageStart: true, visible: false },
+  { driver: "codex", hasThread: true, available: false, atMessageStart: true, visible: false },
+  { driver: "codex", hasThread: true, available: true, atMessageStart: false, visible: false },
+  { driver: "claude", hasThread: true, available: true, atMessageStart: true, visible: false },
+])(
+  "offers /side only for an available existing Codex thread: %j",
+  ({ driver, hasThread, available, atMessageStart, visible }) => {
+    const items = buildComposerSlashCommandItems({
+      query: "si",
+      hasThread,
+      atMessageStart,
+      allowInteractionMode: true,
+      onSideCommand: available ? async () => true : undefined,
+      selectedProviderStatus: { driver: ProviderDriverKind.make(driver), slashCommands: [] },
+    });
+    expect(items.some((item) => item.id === "cmd:side")).toBe(visible);
+  },
+);

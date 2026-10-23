@@ -22,6 +22,14 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
+import {
+  SideConversationError,
+  SideConversationEvent,
+  SideConversationOpened,
+  SideConversationOpenInput,
+  SideConversationSendInput,
+  SideConversationTarget,
+} from "./sideConversation.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -471,6 +479,10 @@ export const WS_METHODS = {
   deviceAction: "device.action",
 
   serverProbe: "server.probe",
+  sideConversationOpen: "sideConversation.open",
+  sideConversationSend: "sideConversation.send",
+  sideConversationInterrupt: "sideConversation.interrupt",
+  sideConversationClose: "sideConversation.close",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
   serverUpdateProvider: "server.updateProvider",
@@ -597,6 +609,28 @@ const WsServerProbeRpc = Rpc.make(WS_METHODS.serverProbe, {
   payload: Schema.Struct({}),
   success: Schema.Struct({}),
   error: EnvironmentAuthorizationError,
+});
+
+const WsSideConversationOpenRpc = Rpc.make(WS_METHODS.sideConversationOpen, {
+  payload: SideConversationOpenInput,
+  success: SideConversationOpened,
+  error: Schema.Union([SideConversationError, EnvironmentAuthorizationError]),
+});
+const WsSideConversationSendRpc = Rpc.make(WS_METHODS.sideConversationSend, {
+  payload: SideConversationSendInput,
+  success: SideConversationEvent,
+  error: Schema.Union([SideConversationError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+const WsSideConversationInterruptRpc = Rpc.make(WS_METHODS.sideConversationInterrupt, {
+  payload: SideConversationTarget,
+  success: Schema.Void,
+  error: Schema.Union([SideConversationError, EnvironmentAuthorizationError]),
+});
+const WsSideConversationCloseRpc = Rpc.make(WS_METHODS.sideConversationClose, {
+  payload: SideConversationTarget,
+  success: Schema.Void,
+  error: Schema.Union([SideConversationError, EnvironmentAuthorizationError]),
 });
 
 const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
@@ -1880,6 +1914,10 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsSideConversationOpenRpc,
+  WsSideConversationSendRpc,
+  WsSideConversationInterruptRpc,
+  WsSideConversationCloseRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

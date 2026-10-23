@@ -15,6 +15,10 @@ import {
   withMessageContext,
   makeThreadErrorSetter,
 } from "../ChatView.logic";
+import {
+  consumeSideCommandDraft,
+  parseSideCommand,
+} from "@t3tools/client-runtime/side-conversation-controller";
 import { isUsageLimitsCommand } from "@t3tools/shared/usageLimits";
 import {
   AuthOrchestrationOperateScope,
@@ -208,6 +212,7 @@ interface ComposerSendInput {
   readonly usageLimitsKey: string | null;
   readonly usageLimitsOffered: boolean;
   readonly openUsageLimits: UsageLimitsPanel["open"];
+  readonly openSideConversation: (prompt: string) => Promise<boolean>;
   readonly clearUsageLimitsFor: UsageLimitsPanel["clearFor"];
   readonly needsLoadBalancing: boolean;
   readonly loadBalancing: DraftEnvironmentRouting["loadBalancing"];
@@ -295,6 +300,7 @@ export function useComposerSend(input: ComposerSendInput) {
     usageLimitsKey,
     usageLimitsOffered,
     openUsageLimits,
+    openSideConversation,
     clearUsageLimitsFor,
     needsLoadBalancing,
     loadBalancing,
@@ -396,6 +402,29 @@ export function useComposerSend(input: ComposerSendInput) {
     // What the user pressed send on; uploads below can take a while, and a redirect must not
     // decline approvals for a draft that changed meanwhile.
     const promptAtSend = promptRef.current;
+    const sidePrompt = directAnnotation ? null : parseSideCommand(promptAtSend);
+    if (sidePrompt !== null && !queuedRunEdit.isEditing) {
+      const issue = await consumeSideCommandDraft({
+        hasNonPromptContent: draftHasNonPromptContent(composerDraftTarget),
+        commandText: promptAtSend,
+        prompt: sidePrompt,
+        open: openSideConversation,
+        readDraft: () => promptRef.current,
+        clearDraft: () => {
+          promptRef.current = "";
+          setComposerDraftPrompt(composerDraftTarget, "");
+          composerRef.current?.resetCursorState();
+        },
+      });
+      if (issue === "attachments") {
+        toastManager.add({
+          type: "warning",
+          title: "Side conversations accept text questions",
+          description: "Remove attachments before opening a side conversation.",
+        });
+      }
+      return;
+    }
     if (
       usageLimitsOffered &&
       usageLimitsKey !== null &&

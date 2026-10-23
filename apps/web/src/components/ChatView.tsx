@@ -15,6 +15,8 @@ import { useThreadLifecycle } from "./chat/useThreadLifecycle";
 import { useRightPanelActions } from "./chat/useRightPanelActions";
 import { type TerminalLaunchContext, useChatTerminalActions } from "./chat/useChatTerminalActions";
 import { useComposerSend } from "./chat/useComposerSend";
+import { SideConversationPanel } from "./chat/SideConversationPanel";
+import { sideConversationEnvironment, useSideConversationTabs } from "../state/sideConversations";
 import { useComposerResume } from "./chat/useComposerResume";
 import { useImplementPlanInNewThread } from "./chat/useProposedPlanSend";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
@@ -949,7 +951,8 @@ export default function ChatView(props: ChatViewProps) {
   );
   const canReuseTerminal = activeThreadKnownSessionsRaw !== null;
   const previewPanelOpen = activeRightPanelKind === "preview" && browserAvailable;
-  const rightPanelOpen = rightPanelState.isOpen;
+  const sidePanelOpen = useSideConversationTabs((state) => state.tabs.length > 0 && state.visible);
+  const rightPanelOpen = rightPanelState.isOpen && !sidePanelOpen;
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const rightPanelPresenceValue = {
@@ -2859,6 +2862,56 @@ export default function ChatView(props: ChatViewProps) {
     activeEnvironmentUnavailable,
     defaultRuntimeMode,
   });
+  const canOpenSideConversation = useAtomValue(
+    sideConversationEnvironment.open.permissionAtom(environmentId),
+  );
+  const sideConversationAvailable =
+    canOpenSideConversation &&
+    isServerThread &&
+    activeProviderThread?.driver === "codex" &&
+    activeProviderThread.nativeThreadRef !== null &&
+    activeProviderThread.providerSessionId !== null &&
+    activeThread?.archivedAt === null &&
+    activeThread.deletedAt === null &&
+    activeProviderThread.providerInstanceId === activeThread.providerInstanceId &&
+    !activeEnvironmentUnavailable &&
+    !queuedRunEdit.isEditing;
+  const sideCommandPendingRef = useRef(false);
+  const openSideConversation = async (prompt: string) => {
+    if (sideCommandPendingRef.current) return false;
+    if (!sideConversationAvailable || !activeThreadRef || !activeThread) {
+      toastManager.add({
+        type: "warning",
+        title: "Side conversations need an existing Codex thread",
+        description: "Open a connected Codex thread with message history to use /side.",
+      });
+      return false;
+    }
+    sideCommandPendingRef.current = true;
+    return useSideConversationTabs
+      .getState()
+      .open({
+        parent: activeThreadRef,
+        parentTitle: activeThread.title,
+        cwd: activeWorkspaceRoot,
+        prompt,
+      })
+      .then(
+        () => currentRouteThreadKeyRef.current === routeThreadKey,
+        (error: unknown) => {
+          toastManager.add({
+            type: "error",
+            title: "Could not open a side conversation",
+            description: error instanceof Error ? error.message : "Try again from the main thread.",
+          });
+          return false;
+        },
+      )
+      .finally(() => {
+        sideCommandPendingRef.current = false;
+      });
+  };
+  const openSideConversationStable = useStableCallback(openSideConversation);
   const { onSend } = useComposerSend({
     environmentId,
     routeThreadKey,
@@ -2905,6 +2958,7 @@ export default function ChatView(props: ChatViewProps) {
     usageLimitsKey,
     usageLimitsOffered,
     openUsageLimits,
+    openSideConversation: openSideConversationStable,
     clearUsageLimitsFor,
     needsLoadBalancing,
     loadBalancing,
@@ -3534,6 +3588,11 @@ export default function ChatView(props: ChatViewProps) {
                               resumeCompactionTokens={resumeCompactionTokens}
                               keepFullHistory={keepFullHistory}
                               onToggleKeepFullHistory={toggleKeepFullHistoryStable}
+                              onSideCommand={
+                                sideConversationAvailable && !composerHasNonPromptContent
+                                  ? () => openSideConversationStable("")
+                                  : undefined
+                              }
                               onUsageLimitsCommand={
                                 usageLimitsOffered &&
                                 usageLimitsKey !== null &&
@@ -3829,7 +3888,7 @@ export default function ChatView(props: ChatViewProps) {
         />
       </div>
 
-      {rightPanelPresent && activeThreadRef ? (
+      {rightPanelPresent && activeThreadRef && !sidePanelOpen ? (
         <ChatRightPanel
           sheet={shouldUsePlanSidebarSheet}
           workspaceLayoutElement={workspaceLayoutElement}
@@ -3883,6 +3942,8 @@ export default function ChatView(props: ChatViewProps) {
           {rightPanelContent}
         </ChatRightPanel>
       ) : null}
+
+      <SideConversationPanel />
 
       <RevertConfirmHost threadKey={routeThreadKey} onConfirm={onConfirmRevertStable} />
       <LinkPullRequestDialogHost />

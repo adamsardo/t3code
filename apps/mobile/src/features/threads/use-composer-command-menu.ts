@@ -66,6 +66,7 @@ export function buildComposerSlashCommandItems(input: {
   readonly hasThread: boolean;
   readonly hasCompactableConversation?: boolean;
   readonly offersUsageLimits?: boolean;
+  readonly onSideCommand?: (prompt: string) => Promise<boolean>;
   readonly allowInteractionMode: boolean;
   readonly selectedProviderStatus: Pick<
     ServerProvider,
@@ -105,6 +106,20 @@ export function buildComposerSlashCommandItems(input: {
   // Providers expand commands only at the start of a message. T3 commands
   // change local state and do not have this restriction.
   if (!input.atMessageStart) return items;
+  if (
+    input.hasThread &&
+    input.onSideCommand &&
+    input.selectedProviderStatus?.driver === "codex" &&
+    "side".includes(query)
+  ) {
+    items.push({
+      id: "cmd:side",
+      type: "slash-command",
+      command: "side",
+      label: "/side",
+      description: "Open a temporary conversation with this thread’s context",
+    });
+  }
   for (const command of input.selectedProviderStatus?.slashCommands ?? []) {
     if (!command.name.toLowerCase().includes(query)) continue;
     if (command.name === "compact" && !input.hasCompactableConversation) continue;
@@ -185,6 +200,7 @@ export function useComposerCommandMenu({
   onChangeDraftMessage,
   onUpdateInteractionMode,
   onUsageLimits,
+  onSideCommand,
 }: {
   readonly draftMessage: string;
   readonly ownerKey: string | null;
@@ -203,6 +219,7 @@ export function useComposerCommandMenu({
   readonly onChangeDraftMessage: (value: string) => void;
   readonly onUpdateInteractionMode?: (mode: ProviderInteractionMode) => void;
   readonly onUsageLimits?: () => void;
+  readonly onSideCommand?: (prompt: string) => Promise<boolean>;
 }) {
   const [selection, setSelection] = useState(() => composerSelectionAtEnd(draftMessage));
   const previousOwnerKeyRef = useRef(ownerKey);
@@ -385,6 +402,7 @@ export function useComposerCommandMenu({
         hasThread,
         hasCompactableConversation,
         offersUsageLimits,
+        onSideCommand,
         allowInteractionMode: onUpdateInteractionMode !== undefined,
         selectedProviderStatus: selectedProviderStatus
           ? {
@@ -595,6 +613,17 @@ export function useComposerCommandMenu({
       setSelection({ start: cleared.cursor, end: cleared.cursor });
       onChangeDraftMessage(cleared.text);
       onUsageLimits();
+      return;
+    }
+
+    if (item.type === "slash-command" && item.command === "side" && onSideCommand) {
+      const original = draftMessage;
+      const cleared = replaceTextRange(original, trigger.rangeStart, trigger.rangeEnd, "");
+      void onSideCommand("").then((opened) => {
+        if (!opened || !ownerKey || getComposerDraftSnapshot(ownerKey).text !== original) return;
+        setSelection({ start: cleared.cursor, end: cleared.cursor });
+        onChangeDraftMessage(cleared.text);
+      });
       return;
     }
 
