@@ -371,3 +371,58 @@ it.effect("denies manual cleanup before the handler without settings permission"
     expect(handled).toBe(false);
   }).pipe(Effect.scoped),
 );
+
+it.effect(
+  "rejects every side-conversation operation for a read-only connection before handling it",
+  () =>
+    Effect.gen(function* () {
+      const methods = [
+        WS_METHODS.sideConversationOpen,
+        WS_METHODS.sideConversationSend,
+        WS_METHODS.sideConversationInterrupt,
+        WS_METHODS.sideConversationClose,
+      ] as const;
+      const selected = new Set<string>(methods);
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof methods)[number]> =>
+            !selected.has(tag),
+        ),
+      );
+      let handled = 0;
+      const touch = Effect.sync(() => {
+        handled++;
+      });
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.sideConversationOpen, () =>
+              touch.pipe(
+                Effect.as({ conversationId: "side", parentThreadId: ThreadId.make("parent") }),
+              ),
+            ),
+            group.toLayerHandler(WS_METHODS.sideConversationSend, () =>
+              Stream.fromEffect(touch).pipe(Stream.drain),
+            ),
+            group.toLayerHandler(WS_METHODS.sideConversationInterrupt, () => touch),
+            group.toLayerHandler(WS_METHODS.sideConversationClose, () => touch),
+            RpcAuthorization.layer([AuthOrchestrationReadScope]),
+          ),
+        ),
+      );
+      const attempts = [
+        client[WS_METHODS.sideConversationOpen]({ threadId: ThreadId.make("parent") }),
+        Stream.runDrain(
+          client[WS_METHODS.sideConversationSend]({ conversationId: "side", text: "question" }),
+        ),
+        client[WS_METHODS.sideConversationInterrupt]({ conversationId: "side" }),
+        client[WS_METHODS.sideConversationClose]({ conversationId: "side" }),
+      ];
+      for (const attempt of attempts) {
+        expect(yield* Effect.flip(attempt)).toMatchObject({
+          requiredPermission: AuthOrchestrationOperateScope,
+        });
+      }
+      expect(handled).toBe(0);
+    }).pipe(Effect.scoped),
+);

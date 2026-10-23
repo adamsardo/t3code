@@ -1,3 +1,9 @@
+import { SideConversationSheet } from "./SideConversationSheet";
+import {
+  openSideConversation,
+  sideConversationEnvironment,
+  useHasSideConversationContext,
+} from "../../state/side-conversations";
 import { useSidebarWorkspaceTabs } from "../workspace/useSystemWorkspaceTabBar";
 import {
   isAtomCommandInterrupted,
@@ -454,6 +460,44 @@ function ThreadVisitWatermark(props: {
 }
 
 export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetailScreenProps) {
+  const canOpenSide = useAtomValue(
+    sideConversationEnvironment.open.permissionAtom(props.environmentId),
+  );
+  const hasSideContext = useHasSideConversationContext(props.selectedThreadDetailRef);
+  const openingSide = useRef(false);
+  const currentSideOwner = `${props.environmentId}:${props.selectedThread.id}`;
+  const currentSideOwnerRef = useRef(currentSideOwner);
+  useLayoutEffect(() => {
+    currentSideOwnerRef.current = currentSideOwner;
+  }, [currentSideOwner]);
+  const sideAvailable =
+    !props.draftMode &&
+    props.queuedRunEdit === null &&
+    props.connectionStateLabel === "connected" &&
+    canOpenSide &&
+    hasSideContext;
+  const handleOpenSide = (prompt: string): Promise<boolean> => {
+    if (!sideAvailable || openingSide.current) return Promise.resolve(false);
+    openingSide.current = true;
+    return openSideConversation({
+      parent: { environmentId: props.environmentId, threadId: props.selectedThread.id },
+      parentTitle: props.selectedThread.title,
+      prompt,
+    })
+      .then(
+        () => currentSideOwnerRef.current === currentSideOwner,
+        (error: unknown) => {
+          Dialog.alert(
+            "Could not open side conversation",
+            error instanceof Error ? error.message : String(error),
+          );
+          return false;
+        },
+      )
+      .finally(() => {
+        openingSide.current = false;
+      });
+  };
   const usesNativeWorkspaceColumns = useNativeWorkspaceColumnsSupported();
   const navigation = useNavigation();
   const { session: voiceInputSession } = useGlobalVoiceInput();
@@ -1726,6 +1770,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
                         onStopThread={props.onStopThread}
                         onResumeQueue={props.onResumeQueue}
                         onSendMessage={handleSendMessage}
+                        onSideCommand={sideAvailable ? handleOpenSide : undefined}
                         onShowUsageLimits={showUsageLimits}
                         canSwitchProvider={props.canSwitchThreadProvider}
                         onUpdateModelSelection={props.onUpdateThreadModelSelection}
@@ -1742,6 +1787,7 @@ export const ThreadDetailScreen = function ThreadDetailScreen(props: ThreadDetai
           </ComposerPopoverHost>
         </KeyboardStickyView>
       ) : null}
+      <SideConversationSheet />
     </View>
   );
 };

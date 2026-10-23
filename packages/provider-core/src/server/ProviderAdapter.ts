@@ -33,6 +33,8 @@ import {
   RunId,
   ThreadId,
   TurnItemId,
+  type SideConversationError,
+  type SideConversationEvent,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
@@ -554,6 +556,27 @@ export interface ProviderAdapterV2SessionRuntime {
   readonly providerSessionId: ProviderSessionId;
   readonly providerSession: OrchestrationV2ProviderSession;
   readonly events: Stream.Stream<ProviderAdapterV2Event, ProviderAdapterV2Error>;
+  /** Temporary, provider-native conversations with no durable app-thread projection. */
+  readonly sideConversations?: {
+    readonly hasOpen: Effect.Effect<boolean>;
+    readonly open: (input: {
+      readonly providerThread: OrchestrationV2ProviderThread;
+      readonly modelSelection: ModelSelection;
+      readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
+    }) => Effect.Effect<
+      {
+        readonly id: string;
+        readonly send: (
+          text: string,
+        ) => Stream.Stream<SideConversationEvent, SideConversationError>;
+        readonly interrupt: Effect.Effect<void, SideConversationError>;
+        readonly close: Effect.Effect<void, SideConversationError>;
+        /** Owner disconnect must release an unreachable process hold even after native failure. */
+        readonly dispose: Effect.Effect<void>;
+      },
+      SideConversationError
+    >;
+  };
   /**
    * Manager-owned runtimes expose a synchronous subscription so concurrent
    * provider threads receive independent copies of the process event stream.

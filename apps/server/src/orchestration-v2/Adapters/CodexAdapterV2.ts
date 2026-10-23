@@ -32,6 +32,7 @@ import {
   isOrchestrationV2WorkActive,
   OrchestrationV2ProviderGoal,
   ProviderDriverKind,
+  SideConversationError,
   type ProviderSetupError,
 } from "@t3tools/contracts";
 import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
@@ -73,6 +74,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import * as CodexClient from "effect-codex-app-server/client";
+import { makeCodexSideConversations } from "../../provider/CodexSideConversations.ts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexSchema from "effect-codex-app-server/schema";
 import * as Cause from "effect/Cause";
@@ -1763,7 +1765,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     }),
                 ),
               );
-        const client = yield* clientFactory.open({
+        const nativeClient = yield* clientFactory.open({
           instanceId: adapterOptions.instanceId,
           threadId: input.threadId,
           providerSessionId: input.providerSessionId,
@@ -1771,6 +1773,17 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
           environment: resolvedRuntime?.environment ?? adapterOptions.environment,
         });
+        const { parentClient: client, ...sideConversations } = yield* makeCodexSideConversations(
+          (sideInput) =>
+            buildCodexTurnStartParams({
+              nativeThreadId: sideInput.nativeThreadId,
+              codexInput: [{ type: "text", text: sideInput.text, text_elements: [] }],
+              modelSelection: sideInput.modelSelection,
+              runtimePolicy: sideInput.runtimePolicy,
+              hasT3Mcp: false,
+              omitServiceTier: adapterOptions.resolveRuntime !== undefined,
+            }),
+        ).pipe(Effect.provideService(CodexClient.CodexAppServerClient, nativeClient));
         const additionalContextByThread = yield* Ref.make(
           new Map<
             string,
@@ -6631,6 +6644,16 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
         };
 
         const runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime = {
+          sideConversations: {
+            ...sideConversations,
+            open: (sideInput) =>
+              ensureInitialized.pipe(
+                Effect.mapError(
+                  (cause) => new SideConversationError({ reason: "provider_failure", cause }),
+                ),
+                Effect.andThen(sideConversations.open(sideInput)),
+              ),
+          },
           instanceId: adapterOptions.instanceId,
           driver: CODEX_PROVIDER,
           providerSessionId: input.providerSessionId,

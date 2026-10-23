@@ -1,3 +1,4 @@
+import * as SideConversations from "./provider/SideConversations.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -330,6 +331,14 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(ProviderLatestVersions.ProviderLatestVersions)({}),
   Layer.mock(ProviderMaintenanceRunner.ProviderMaintenanceRunner)({}),
   Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({}),
+  Layer.mock(SideConversations.SideConversations)({
+    connect: Effect.succeed({
+      open: () => Effect.die("unused"),
+      send: () => Stream.die("unused"),
+      interrupt: () => Effect.die("unused"),
+      close: () => Effect.die("unused"),
+    }),
+  }),
   Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
   Layer.mock(PullRequestService.PullRequestService)({}),
   Layer.mock(PullRequestSyncReactor.PullRequestSyncReactor)({}),

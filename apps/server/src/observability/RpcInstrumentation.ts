@@ -14,6 +14,10 @@ type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
  * even where they differ from the method prefix.
  */
 const RPC_AGGREGATES = {
+  [WS_METHODS.sideConversationOpen]: "sideConversation",
+  [WS_METHODS.sideConversationSend]: "sideConversation",
+  [WS_METHODS.sideConversationInterrupt]: "sideConversation",
+  [WS_METHODS.sideConversationClose]: "sideConversation",
   [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: "orchestrationV2",
   [ORCHESTRATION_V2_WS_METHODS.getWorkflowScript]: "orchestration",
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: "orchestration",
